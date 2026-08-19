@@ -1,0 +1,6 @@
+@Anki67.Api_HostAddress = http://localhost:0
+
+GET {{Anki67.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
