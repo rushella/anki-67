@@ -1,6 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Anki67.Api/Anki67.Api.csproj" />
-    <Project Path="src/Anki67.Web/Anki67.Web.csproj" />
-  </Folder>
-</Solution>

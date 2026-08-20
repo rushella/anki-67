@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Anki67.Api/Anki67.Api.csproj" />
+  <Project Path="Anki67.Web/Anki67.Web.csproj" />
+</Solution>
