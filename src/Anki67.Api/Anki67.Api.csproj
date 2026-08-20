@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>Anki67.Api-53fb41cc-5db0-4fa1-8a1d-42a441e3ec5d</UserSecretsId>
   </PropertyGroup>
 
 </Project>

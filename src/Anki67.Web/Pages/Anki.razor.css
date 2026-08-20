@@ -1,0 +1,20 @@
+.note-list {
+    max-height: 65vh;
+    overflow-y: auto;
+}
+
+.note-list .active .text-body-secondary {
+    color: rgba(255, 255, 255, 0.78) !important;
+}
+
+.field-editor {
+    min-height: 7rem;
+    resize: vertical;
+}
+
+@media (min-width: 992px) {
+    .editor-card {
+        position: sticky;
+        top: 5.25rem;
+    }
+}

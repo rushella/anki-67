@@ -1,0 +1,471 @@
+﻿@page "/anki"
+@using System.Net
+@using System.Text.RegularExpressions
+@using Anki67.Web.Anki
+@inject AnkiApiClient AnkiClient
+
+<PageTitle>Anki connection | Anki67</PageTitle>
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+    <div>
+        <span class="badge rounded-pill text-bg-primary mb-2">AnkiConnect</span>
+        <h1 class="display-6 fw-semibold mb-1">Edit your Anki notes</h1>
+        <p class="text-body-secondary mb-0">Search, update, and sync without leaving Anki67.</p>
+    </div>
+    <div class="d-grid d-sm-flex gap-2">
+        <button type="button"
+                class="btn btn-outline-secondary"
+                disabled="@_checkingConnection"
+                @onclick="RefreshConnectionAsync">
+            @if (_checkingConnection)
+            {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+            }
+            Check connection
+        </button>
+        <button type="button"
+                class="btn btn-primary"
+                disabled="@(_status?.Connected != true || _syncing)"
+                @onclick="SyncAsync">
+            @if (_syncing)
+            {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+            }
+            Sync AnkiWeb
+        </button>
+    </div>
+</div>
+
+@if (_status is null)
+{
+    <div class="card border-0 shadow-sm mb-4" aria-busy="true">
+        <div class="card-body d-flex align-items-center gap-3">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Checking connection</span></div>
+            <span>Checking AnkiConnect…</span>
+        </div>
+    </div>
+}
+else if (!_status.Connected)
+{
+    <div class="alert alert-warning shadow-sm mb-4" role="alert">
+        <h2 class="h5 alert-heading">AnkiConnect is not reachable</h2>
+        <p>@_status.Message</p>
+        <hr />
+        <ol class="mb-2 ps-3">
+            <li>In Anki Desktop, open <strong>Tools → Add-ons → Get Add-ons</strong>.</li>
+            <li>Install add-on code <code>2055492159</code>, then restart and keep Anki open.</li>
+            <li>Verify that <code>@_status.Endpoint</code> is reachable from the API process.</li>
+        </ol>
+        <p class="small mb-0">When Anki runs on Windows and Anki67.Api runs in WSL, you may need to change <code>AnkiConnect:Endpoint</code> to a Windows host address reachable from WSL.</p>
+    </div>
+}
+else
+{
+    <div class="alert alert-success d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 shadow-sm mb-4" role="status">
+        <div>
+            <strong>Connected</strong> to profile <strong>@_status.Profile</strong>
+            <span class="text-body-secondary">· API v@_status.Version · @_status.DeckCount decks</span>
+        </div>
+        <code>@_status.Endpoint</code>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_errorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @_errorMessage
+        <button type="button" class="btn-close" aria-label="Close" @onclick="ClearError"></button>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_successMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="status">
+        @_successMessage
+        <button type="button" class="btn-close" aria-label="Close" @onclick="ClearSuccess"></button>
+    </div>
+}
+
+<section class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <EditForm Model="_search" OnValidSubmit="SearchAsync">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label for="deck" class="form-label">Deck</label>
+                    <InputSelect id="deck" class="form-select" @bind-Value="_search.Deck" disabled="@(_status?.Connected != true)">
+                        <option value="">All decks</option>
+                        @foreach (var deck in _decks)
+                        {
+                            <option value="@deck">@deck</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label for="query" class="form-label">Anki search</label>
+                    <InputText id="query"
+                               class="form-control"
+                               placeholder="tag:learning or Front:example"
+                               @bind-Value="_search.Query"
+                               disabled="@(_status?.Connected != true)" />
+                </div>
+                <div class="col-12 col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary" disabled="@(_status?.Connected != true || _searching)">
+                        @if (_searching)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                        }
+                        Search
+                    </button>
+                </div>
+            </div>
+            <div class="form-text mt-2">Uses standard Anki search syntax. Leave both fields empty to load the first 50 notes.</div>
+        </EditForm>
+    </div>
+</section>
+
+@if (_hasSearched)
+{
+    <div class="row g-4 align-items-start">
+        <div class="col-12 col-lg-5">
+            <section class="card border-0 shadow-sm">
+                <div class="card-header bg-body d-flex align-items-center justify-content-between py-3">
+                    <h2 class="h5 mb-0">Notes</h2>
+                    <span class="badge text-bg-secondary">@_totalMatches total</span>
+                </div>
+
+                @if (_notes.Count == 0)
+                {
+                    <div class="card-body text-center py-5">
+                        <p class="h5">No notes found</p>
+                        <p class="text-body-secondary mb-0">Try a broader deck or search query.</p>
+                    </div>
+                }
+                else
+                {
+                    @if (_truncated)
+                    {
+                        <div class="alert alert-info rounded-0 border-start-0 border-end-0 mb-0 py-2 small">Showing the first @_notes.Count matches.</div>
+                    }
+                    <div class="list-group list-group-flush note-list">
+                        @foreach (var note in _notes)
+                        {
+                            <button type="button"
+                                    class="list-group-item list-group-item-action @GetSelectedClass(note)"
+                                    @onclick="() => SelectNote(note)">
+                                <div class="d-flex w-100 align-items-start justify-content-between gap-2">
+                                    <span class="fw-semibold text-break">@GetNotePreview(note)</span>
+                                    <span class="badge rounded-pill text-bg-light">@note.ModelName</span>
+                                </div>
+                                <div class="small mt-2 text-body-secondary">
+                                    @note.Fields.Count fields · @note.Tags.Count tags · ID @note.NoteId
+                                </div>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="col-12 col-lg-7">
+            @if (_editor is null)
+            {
+                <section class="card border-0 shadow-sm">
+                    <div class="card-body text-center py-5 text-body-secondary">Select a note to edit it.</div>
+                </section>
+            }
+            else
+            {
+                <section class="card border-0 shadow-sm editor-card" @key="_editor.NoteId">
+                    <div class="card-header bg-body d-flex flex-wrap align-items-center justify-content-between gap-2 py-3">
+                        <div>
+                            <h2 class="h5 mb-1">Edit note</h2>
+                            <span class="small text-body-secondary">@_editor.ModelName · ID @_editor.NoteId</span>
+                        </div>
+                        <span class="badge text-bg-light">@_editor.Fields.Count fields</span>
+                    </div>
+                    <div class="card-body">
+                        <EditForm Model="_editor" OnValidSubmit="SaveAsync">
+                            <DataAnnotationsValidator />
+
+                            @foreach (var field in _editor.Fields)
+                            {
+                                <div class="mb-3" @key="field.Name">
+                                    <label class="form-label fw-semibold" for="@GetFieldId(field)">@field.Name</label>
+                                    <InputTextArea id="@GetFieldId(field)" class="form-control field-editor" @bind-Value="field.Value" />
+                                </div>
+                            }
+
+                            <div class="mb-3">
+                                <label for="tags" class="form-label fw-semibold">Tags</label>
+                                <InputText id="tags" class="form-control" @bind-Value="_editor.Tags" />
+                                <div class="form-text">Separate tags with spaces.</div>
+                            </div>
+
+                            <div class="alert alert-light border small">
+                                Don’t keep this same note open in Anki’s Browse window while saving; AnkiConnect warns that the browser can overwrite external field updates.
+                            </div>
+
+                            <div class="d-grid d-sm-flex justify-content-sm-end gap-2">
+                                <button type="button" class="btn btn-outline-secondary" disabled="@_saving" @onclick="ResetEditor">Reset</button>
+                                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                                    @if (_saving)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                                    }
+                                    Save to Anki
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </section>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly Regex HtmlTags = new("<[^>]+>", RegexOptions.Compiled);
+
+    private readonly SearchModel _search = new();
+    private readonly List<string> _decks = [];
+    private readonly List<AnkiNote> _notes = [];
+
+    private AnkiConnectionStatus? _status;
+    private EditableNote? _editor;
+    private AnkiNote? _selectedNote;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private int _totalMatches;
+    private bool _truncated;
+    private bool _hasSearched;
+    private bool _checkingConnection;
+    private bool _searching;
+    private bool _saving;
+    private bool _syncing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshConnectionAsync();
+    }
+
+    private async Task RefreshConnectionAsync()
+    {
+        _checkingConnection = true;
+        ClearMessages();
+
+        try
+        {
+            _status = await AnkiClient.GetStatusAsync();
+            _decks.Clear();
+
+            if (_status.Connected)
+            {
+                _decks.AddRange(await AnkiClient.GetDecksAsync());
+            }
+        }
+        catch (AnkiApiException exception)
+        {
+            _status = null;
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _checkingConnection = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        _searching = true;
+        ClearMessages();
+
+        try
+        {
+            var result = await AnkiClient.SearchNotesAsync(BuildSearchQuery());
+            _notes.Clear();
+            _notes.AddRange(result.Notes);
+            _totalMatches = result.Total;
+            _truncated = result.Truncated;
+            _hasSearched = true;
+
+            if (_notes.Count > 0)
+            {
+                SelectNote(_notes[0]);
+            }
+            else
+            {
+                _selectedNote = null;
+                _editor = null;
+            }
+        }
+        catch (AnkiApiException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        ClearMessages();
+
+        try
+        {
+            var fields = _editor.Fields.ToDictionary(field => field.Name, field => field.Value);
+            var tags = _editor.Tags.Split(
+                ' ',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            var updated = await AnkiClient.UpdateNoteAsync(
+                _editor.NoteId,
+                new UpdateAnkiNote(fields, tags));
+
+            var index = _notes.FindIndex(note => note.NoteId == updated.NoteId);
+            if (index >= 0)
+            {
+                _notes[index] = updated;
+            }
+
+            SelectNote(updated);
+            _successMessage = "The note was updated in Anki Desktop.";
+        }
+        catch (AnkiApiException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SyncAsync()
+    {
+        _syncing = true;
+        ClearMessages();
+
+        try
+        {
+            var result = await AnkiClient.SyncAsync();
+            _successMessage = $"{result.Message} {result.SyncedAt.ToLocalTime():g}";
+        }
+        catch (AnkiApiException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    private void SelectNote(AnkiNote note)
+    {
+        _selectedNote = note;
+        _editor = EditableNote.From(note);
+        ClearMessages();
+    }
+
+    private void ResetEditor()
+    {
+        if (_selectedNote is not null)
+        {
+            _editor = EditableNote.From(_selectedNote);
+        }
+    }
+
+    private string BuildSearchQuery()
+    {
+        var query = _search.Query.Trim();
+        if (string.IsNullOrWhiteSpace(_search.Deck))
+        {
+            return query;
+        }
+
+        var escapedDeck = _search.Deck.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var deckQuery = $"deck:\"{escapedDeck}\"";
+        return string.IsNullOrWhiteSpace(query) ? deckQuery : $"{deckQuery} {query}";
+    }
+
+    private string GetSelectedClass(AnkiNote note) =>
+        _selectedNote?.NoteId == note.NoteId ? "active" : string.Empty;
+
+    private static string GetNotePreview(AnkiNote note)
+    {
+        var firstField = note.Fields.OrderBy(field => field.Value.Order).FirstOrDefault();
+        if (firstField.Equals(default(KeyValuePair<string, AnkiField>)))
+        {
+            return $"Note {note.NoteId}";
+        }
+
+        var text = WebUtility.HtmlDecode(HtmlTags.Replace(firstField.Value.Value, " "));
+        text = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return $"{firstField.Key} (empty)";
+        }
+
+        return text.Length > 100 ? $"{text[..100]}…" : text;
+    }
+
+    private static string GetFieldId(EditableField field) =>
+        $"field-{field.Order}";
+
+    private void ClearMessages()
+    {
+        _errorMessage = null;
+        _successMessage = null;
+    }
+
+    private void ClearError() => _errorMessage = null;
+
+    private void ClearSuccess() => _successMessage = null;
+
+    private sealed class SearchModel
+    {
+        public string Deck { get; set; } = string.Empty;
+
+        public string Query { get; set; } = string.Empty;
+    }
+
+    private sealed class EditableNote
+    {
+        public long NoteId { get; init; }
+
+        public string ModelName { get; init; } = string.Empty;
+
+        public List<EditableField> Fields { get; init; } = [];
+
+        public string Tags { get; set; } = string.Empty;
+
+        public static EditableNote From(AnkiNote note) => new()
+        {
+            NoteId = note.NoteId,
+            ModelName = note.ModelName,
+            Fields = note.Fields
+                .OrderBy(field => field.Value.Order)
+                .Select(field => new EditableField(field.Key, field.Value.Value, field.Value.Order))
+                .ToList(),
+            Tags = string.Join(' ', note.Tags)
+        };
+    }
+
+    private sealed class EditableField(string name, string value, int order)
+    {
+        public string Name { get; } = name;
+
+        public string Value { get; set; } = value;
+
+        public int Order { get; } = order;
+    }
+}
