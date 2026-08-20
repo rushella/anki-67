@@ -1,0 +1,17 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.5.0">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+    <UserSecretsId>Anki67.AppHost-2ecdf805-945c-4ab2-af93-9ef69bd0ca19</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Anki67.Api\Anki67.Api.csproj" />
+    <ProjectReference Include="..\Anki67.Web\Anki67.Web.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -9,7 +9,11 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5185/";
+var configuredApiBaseUrl = builder.Configuration["ApiBaseUrl"];
+var apiBaseUrl = string.IsNullOrWhiteSpace(configuredApiBaseUrl)
+    ? builder.HostEnvironment.BaseAddress
+    : configuredApiBaseUrl;
+
 builder.Services.AddScoped(_ => new AnkiApiClient(new HttpClient
 {
     BaseAddress = new Uri(apiBaseUrl, UriKind.Absolute),

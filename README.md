@@ -1,6 +1,6 @@
 # Anki67
 
-Anki67 is a .NET 10 Blazor WebAssembly app with an ASP.NET Core API for searching and editing notes in Anki Desktop.
+Anki67 is a .NET 10 Blazor WebAssembly app with an ASP.NET Core API for searching and editing notes in Anki Desktop. Aspire AppHost orchestrates the Web and API projects for local development.
 
 ## How the Anki connection works
 
@@ -24,17 +24,19 @@ Anki67.Api connects to `http://127.0.0.1:8765` by default. The endpoint is confi
 
 ## Run the application
 
-Use two terminals from the repository root:
+Run both projects with one command from the repository root:
 
 ```bash
-dotnet run --project src/Anki67.Api
+dotnet run --project src/Anki67.AppHost
 ```
 
-```bash
-dotnet run --project src/Anki67.Web
-```
+The Aspire dashboard opens automatically. Open the `web` resource from the dashboard, or go directly to <http://localhost:5184/anki>. The API remains available at <http://localhost:5185>.
 
-Open <http://localhost:5184/anki>.
+The AppHost starts Web and API as separate processes, waits for the API health check, and then starts Web. Either project can still be run independently when useful.
+
+### Mobile and tablet access
+
+AppHost is the local development orchestrator, not the production host. Its endpoints currently bind to `localhost`, so they are available to browsers on the development machine. Hosting on Android or exposing the app to another device requires a separate deployment configuration, appropriate network bindings, CORS, firewall rules, and authentication.
 
 The Anki page can:
 
