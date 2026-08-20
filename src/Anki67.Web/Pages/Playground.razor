@@ -1,0 +1,332 @@
+@page "/playground"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<PageTitle>Kanji playground | Anki67</PageTitle>
+
+<div class="d-flex flex-column flex-xl-row align-items-xl-center justify-content-between gap-3 mb-4">
+    <div>
+        <span class="badge rounded-pill text-bg-primary mb-2">KanjiVG experiment</span>
+        <h1 class="display-6 fw-semibold mb-1">Animated Japanese stroke order</h1>
+        <p class="text-body-secondary mb-0">Preview Japanese vector strokes and export a smooth, self-contained animated SVG.</p>
+    </div>
+    <span class="badge text-bg-light border align-self-start align-self-xl-center px-3 py-2">
+        Japanese paths · no CJK font rasterization
+    </span>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_errorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @_errorMessage
+        <button type="button" class="btn-close" aria-label="Close" @onclick="ClearError"></button>
+    </div>
+}
+
+<div class="row g-4 align-items-start">
+    <div class="col-12 col-lg-5 col-xl-4">
+        <section class="card border-0 shadow-sm">
+            <div class="card-body p-3 p-md-4">
+                <h2 class="h5 mb-3">Generator settings</h2>
+
+                <form @onsubmit="LoadAsync" @onsubmit:preventDefault>
+                    <div class="mb-3">
+                        <label for="kanji-character" class="form-label fw-semibold">Japanese kanji</label>
+                        <div class="input-group input-group-lg">
+                            <input id="kanji-character"
+                                   class="form-control kanji-native text-center"
+                                   lang="ja"
+                                   inputmode="text"
+                                   maxlength="2"
+                                   autocomplete="off"
+                                   aria-describedby="kanji-help"
+                                   @bind="_kanji"
+                                   @bind:event="oninput" />
+                            <button type="submit" class="btn btn-primary" disabled="@(!_moduleReady || _loading)">
+                                @if (_loading)
+                                {
+                                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                                    <span class="visually-hidden">Loading</span>
+                                }
+                                else
+                                {
+                                    <span>Load</span>
+                                }
+                            </button>
+                        </div>
+                        <div id="kanji-help" class="form-text">Enter exactly one Han character. The default is <span class="kanji-native" lang="ja">書</span>.</div>
+                    </div>
+
+                    <div>
+                        <label for="stroke-duration" class="form-label">Stroke speed</label>
+                        <select id="stroke-duration" class="form-select" @bind="_strokeDurationMs">
+                            <option value="360">Fast</option>
+                            <option value="560">Natural</option>
+                            <option value="800">Slow</option>
+                        </select>
+                    </div>
+                </form>
+
+                <hr class="my-4" />
+
+                @if (_strokeCount > 0)
+                {
+                    <dl class="row small mb-4">
+                        <dt class="col-6 text-body-secondary fw-normal">Character</dt>
+                        <dd class="col-6 text-end kanji-native fs-5 mb-2" lang="ja">@_loadedCharacter</dd>
+                        <dt class="col-6 text-body-secondary fw-normal">Strokes</dt>
+                        <dd class="col-6 text-end mb-2">@_strokeCount</dd>
+                        <dt class="col-6 text-body-secondary fw-normal">Dataset</dt>
+                        <dd class="col-6 text-end mb-0">KanjiVG r20250816</dd>
+                    </dl>
+                }
+
+                <div class="d-grid gap-2">
+                    <button type="button"
+                            class="btn btn-outline-primary"
+                            disabled="@(!_moduleReady || _strokeCount == 0 || _generating)"
+                            @onclick="ReplayAsync">
+                        Replay preview
+                    </button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            disabled="@(!_moduleReady || _strokeCount == 0 || _generating)"
+                            @onclick="GenerateSvgAsync">
+                        @if (_generating)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                            <span>Creating SVG…</span>
+                        }
+                        else
+                        {
+                            <span>Generate animated SVG</span>
+                        }
+                    </button>
+                </div>
+
+                @if (_generating)
+                {
+                    <p class="small text-body-secondary text-center mt-3 mb-0" role="status">Building the self-contained vector animation…</p>
+                }
+            </div>
+        </section>
+
+        <div class="alert alert-light border small mt-3 mb-0">
+            KanjiVG is Japanese stroke geometry, not a system font. Generated images are derivative works under
+            <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 3.0</a>.
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-7 col-xl-8">
+        <div class="row g-4">
+            <div class="col-12 col-xl-6">
+                <section class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-body d-flex align-items-center justify-content-between py-3">
+                        <h2 class="h5 mb-0">Live preview</h2>
+                        <span class="badge text-bg-light">SVG paths</span>
+                    </div>
+                    <div class="card-body d-grid place-center p-3 p-md-4">
+                        <div id="@PreviewElementId"
+                             class="stroke-stage"
+                             role="img"
+                             aria-label="Animated Japanese kanji stroke-order preview"></div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-12 col-xl-6">
+                <section class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-body d-flex align-items-center justify-content-between gap-2 py-3">
+                        <h2 class="h5 mb-0">Animated SVG result</h2>
+                        @if (_animationBytes > 0)
+                        {
+                            <span class="badge text-bg-success">@FormatBytes(_animationBytes)</span>
+                        }
+                    </div>
+                    <div class="card-body d-flex flex-column p-3 p-md-4">
+                        @if (string.IsNullOrWhiteSpace(_animationUrl))
+                        {
+                            <div class="stroke-stage empty-result d-grid place-center text-center text-body-secondary">
+                                <div>
+                                    <div class="display-5 mb-2" aria-hidden="true">SVG</div>
+                                    <p class="mb-0">Generate an animation to inspect and download it.</p>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="stroke-stage">
+                                <img class="generated-animation"
+                                     src="@_animationUrl"
+                                     lang="ja"
+                                     alt="Animated stroke order for @_loadedCharacter" />
+                            </div>
+                            <a class="btn btn-success mt-3" href="@_animationUrl" download="@_animationFileName">Download @_animationFileName</a>
+                        }
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const string PreviewElementId = "kanji-playground-preview";
+
+    private IJSObjectReference? _module;
+    private string _kanji = "書";
+    private string? _loadedCharacter;
+    private string? _animationUrl;
+    private string? _animationFileName;
+    private string? _errorMessage;
+    private int _strokeDurationMs = 560;
+    private int _strokeCount;
+    private long _animationBytes;
+    private bool _moduleReady;
+    private bool _loading;
+    private bool _generating;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kanji-playground.js");
+            _moduleReady = true;
+            await LoadAsync();
+        }
+        catch (JSException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_module is null || _loading)
+        {
+            return;
+        }
+
+        _loading = true;
+        _errorMessage = null;
+        _animationUrl = null;
+        _animationFileName = null;
+        _animationBytes = 0;
+
+        try
+        {
+            var result = await _module.InvokeAsync<KanjiLoadResult>(
+                "loadAndAnimate",
+                PreviewElementId,
+                _kanji,
+                CreateOptions());
+
+            _loadedCharacter = result.Character;
+            _kanji = result.Character;
+            _strokeCount = result.StrokeCount;
+        }
+        catch (JSException exception)
+        {
+            _strokeCount = 0;
+            _loadedCharacter = null;
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ReplayAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        _errorMessage = null;
+
+        try
+        {
+            await _module.InvokeVoidAsync("replay", PreviewElementId, CreateOptions());
+        }
+        catch (JSException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private async Task GenerateSvgAsync()
+    {
+        if (_module is null || _generating)
+        {
+            return;
+        }
+
+        _generating = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await _module.InvokeAsync<AnimationGenerationResult>(
+                "generateAnimatedSvg",
+                PreviewElementId,
+                CreateOptions());
+
+            _animationUrl = result.Url;
+            _animationFileName = result.FileName;
+            _animationBytes = result.ByteLength;
+        }
+        catch (JSException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _generating = false;
+        }
+    }
+
+    private object CreateOptions() => new
+    {
+        strokeDurationMs = _strokeDurationMs,
+        pauseMs = 120,
+        finalHoldMs = 1200
+    };
+
+    private void ClearError() => _errorMessage = null;
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1_048_576 => $"{bytes / 1_048_576d:0.0} MB",
+        >= 1_024 => $"{bytes / 1_024d:0} KB",
+        _ => $"{bytes} B"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.InvokeVoidAsync("dispose", PreviewElementId);
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private sealed record KanjiLoadResult(string Character, int StrokeCount);
+    private sealed record AnimationGenerationResult(string Url, string FileName, long ByteLength);
+}

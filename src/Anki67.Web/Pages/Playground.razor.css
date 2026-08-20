@@ -1,0 +1,45 @@
+.kanji-native {
+    font-family: "Yu Gothic", "Yu Mincho", "Hiragino Kaku Gothic ProN", "Hiragino Mincho ProN", "Noto Sans CJK JP", "Noto Serif CJK JP", "Noto Sans JP", Meiryo, sans-serif;
+    font-feature-settings: "locl" 1;
+    font-language-override: "JAN";
+}
+
+#kanji-character {
+    min-width: 0;
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.place-center {
+    place-items: center;
+}
+
+.stroke-stage {
+    width: min(100%, 30rem);
+    aspect-ratio: 1;
+    margin-inline: auto;
+    overflow: hidden;
+    border: var(--bs-border-width) solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius-xl);
+    background: #fff;
+}
+
+.stroke-stage ::deep svg,
+.generated-animation {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.empty-result {
+    min-height: 16rem;
+    padding: 2rem;
+    background-color: var(--bs-tertiary-bg);
+}
+
+@media (min-width: 1200px) {
+    .stroke-stage {
+        width: 100%;
+    }
+}

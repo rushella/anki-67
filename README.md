@@ -46,6 +46,12 @@ The Anki page can:
 - save changes directly to Anki Desktop;
 - trigger an explicit sync from Anki Desktop to AnkiWeb.
 
+## KanjiVG playground
+
+Open <http://localhost:5184/playground> to experiment with Japanese stroke-order animation and generate a downloadable, self-contained animated SVG in the browser. The playground uses pinned KanjiVG vector paths rather than rasterizing a CJK font, and it does not read from or write to AnkiConnect.
+
+The experiment currently fetches KanjiVG r20250816 from jsDelivr, so an internet connection is required when loading a character. The generated SVG contains its animation and attribution metadata and works without the CDN after download. KanjiVG data and generated derivatives are subject to the [CC BY-SA 3.0 license](https://creativecommons.org/licenses/by-sa/3.0/).
+
 ## Optional API key
 
 AnkiConnect authentication is disabled by default. To enable it, set `apiKey` in **Tools → Add-ons → AnkiConnect → Config**, then store the same value in .NET user secrets:
