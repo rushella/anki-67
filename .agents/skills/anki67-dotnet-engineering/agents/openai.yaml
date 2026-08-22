@@ -1,0 +1,4 @@
+interface:
+  display_name: "Anki67 .NET Engineering"
+  short_description: "Concise SOLID C# engineering for Anki67"
+  default_prompt: "Use $anki67-dotnet-engineering to implement this Anki67 change with concise SOLID C#, layered architecture, and focused tests."
